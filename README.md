@@ -4,6 +4,15 @@ or the vendor folder if you're a php dev
 
 this script gives you an easy way to clean these up
 
+so, for example:
+```bash
+# list all node_modules directories and subdirectories in ~/project and their size
+node NoModules.js --modules ~/project
+
+# list and remove all node_modules and vendor directories/subdirectories inside ~/project
+node NoModules.js --modules --vendor --clean
+```
+
 usage:
 ```
   Usage: NoModules.js [options] [directory]
@@ -18,15 +27,6 @@ usage:
     --vendor           Scan for vendor directories (Composer)
     --clean            Delete found directories (with confirmation prompt)
     --help, -h         Show this help message
-```
-
-so, for example:
-```bash
-# list all node_modules directories and subdirectories in ~/project and their size
-node NoModules.js --modules ~/project
-
-# list and remove all node_modules and vendor directories/subdirectories inside ~/project
-node NoModules.js --modules --vendor --clean
 ```
 
 - (c) sleep 2026
