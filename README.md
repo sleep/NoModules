@@ -6,11 +6,11 @@ this script gives you an easy way to clean these up
 
 so, for example:
 ```bash
-# list all node_modules directories and subdirectories in ~/project and their size
-node NoModules.js --modules ~/project
-
-# list and remove all node_modules and vendor directories/subdirectories inside ~/project
-node NoModules.js --modules --vendor --clean
+  NoModules.js                        # Scan current directory for node_modules
+  NoModules.js ~/projects             # Scan ~/projects for node_modules
+  NoModules.js --vendor .             # Scan current directory for vendor directories
+  NoModules.js --modules --vendor .   # Scan for both node_modules and vendor
+  NoModules.js --clean ~/projects     # Scan and delete node_modules in ~/projects
 ```
 
 usage:
