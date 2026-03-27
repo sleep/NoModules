@@ -129,6 +129,35 @@ function promptUser(question) {
   });
 }
 
+/**
+ * Prints usage information and exits
+ */
+function printHelp() {
+  const scriptName = path.basename(process.argv[1]);
+  console.log(`Usage: ${scriptName} [options] [directory]
+
+Scan for and optionally delete node_modules and vendor directories.
+
+Arguments:
+  directory          Directory to scan (default: current working directory)
+
+Options:
+  --modules          Scan for node_modules directories
+  --vendor           Scan for vendor directories (Composer)
+  --clean            Delete found directories (with confirmation prompt)
+  --help, -h         Show this help message
+
+If neither --modules nor --vendor is specified, defaults to --modules.
+
+Examples:
+  ${scriptName}                        Scan current directory for node_modules
+  ${scriptName} ~/projects             Scan ~/projects for node_modules
+  ${scriptName} --vendor .             Scan current directory for vendor directories
+  ${scriptName} --modules --vendor .   Scan for both node_modules and vendor
+  ${scriptName} --clean ~/projects     Scan and delete node_modules in ~/projects`);
+  process.exit(0);
+}
+
 // Parse command line arguments
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -138,7 +167,9 @@ function parseArgs() {
   let scanVendor = false;
 
   for (const arg of args) {
-    if (arg === '--clean') {
+    if (arg === '--help' || arg === '-h') {
+      printHelp();
+    } else if (arg === '--clean') {
       cleanMode = true;
     } else if (arg === '--modules') {
       scanModules = true;
