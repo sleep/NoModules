@@ -4,6 +4,21 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 
+// Language -> target directory names. Directories with a `marker` file are
+// only treated as a match when that file exists inside them.
+const LANGUAGES = {
+  js: { label: 'JavaScript', dirs: [{ name: 'node_modules' }] },
+  php: { label: 'PHP', dirs: [{ name: 'vendor', marker: 'autoload.php' }] },
+  py: {
+    label: 'Python',
+    dirs: [
+      { name: '.venv', marker: 'pyvenv.cfg' },
+      { name: 'venv', marker: 'pyvenv.cfg' },
+      { name: '__pycache__' }
+    ]
+  }
+};
+
 /**
  * Recursively calculates the size of a directory in bytes
  */
@@ -81,11 +96,11 @@ function formatBytes(bytes) {
 
 /**
  * Recursively deletes a directory and all its contents
- * SAFETY CHECK: Only deletes if the directory name is exactly "node_modules" or "vendor"
+ * SAFETY CHECK: Only deletes if the directory name is in the allowed list
  * @param {string} dirPath - Path to the directory to delete
  * @param {string[]} allowedNames - Array of allowed directory names to delete
  */
-function deleteDirectory(dirPath, allowedNames = ['node_modules', 'vendor']) {
+function deleteDirectory(dirPath, allowedNames) {
   // CRITICAL SAFETY CHECK: Verify this is an allowed directory
   const dirName = path.basename(dirPath);
   if (!allowedNames.includes(dirName)) {
@@ -136,24 +151,25 @@ function printHelp() {
   const scriptName = path.basename(process.argv[1]);
   console.log(`Usage: ${scriptName} [options] [directory]
 
-Scan for and optionally delete node_modules and vendor directories.
+Scan for and optionally delete dependency directories.
 
 Arguments:
   directory          Directory to scan (default: current working directory)
 
 Options:
-  --modules          Scan for node_modules directories
-  --vendor           Scan for vendor directories (Composer)
+  --js, --javascript Scan for node_modules directories
+  --php              Scan for vendor directories (Composer)
+  --py, --python     Scan for .venv, venv and __pycache__ directories
   --clean            Delete found directories (with confirmation prompt)
   --help, -h         Show this help message
 
-If neither --modules nor --vendor is specified, defaults to --modules.
+If no language flag is specified, defaults to --js.
 
 Examples:
   ${scriptName}                        Scan current directory for node_modules
   ${scriptName} ~/projects             Scan ~/projects for node_modules
-  ${scriptName} --vendor .             Scan current directory for vendor directories
-  ${scriptName} --modules --vendor .   Scan for both node_modules and vendor
+  ${scriptName} --php .                Scan current directory for vendor directories
+  ${scriptName} --js --php --py .      Scan for all supported languages
   ${scriptName} --clean ~/projects     Scan and delete node_modules in ~/projects`);
   process.exit(0);
 }
@@ -163,39 +179,46 @@ function parseArgs() {
   const args = process.argv.slice(2);
   let cleanMode = false;
   let targetFolder = null;
-  let scanModules = false;
-  let scanVendor = false;
+  const languages = new Set();
+
+  const flagToLanguage = {
+    '--js': 'js',
+    '--javascript': 'js',
+    '--php': 'php',
+    '--py': 'py',
+    '--python': 'py'
+  };
 
   for (const arg of args) {
     if (arg === '--help' || arg === '-h') {
       printHelp();
     } else if (arg === '--clean') {
       cleanMode = true;
-    } else if (arg === '--modules') {
-      scanModules = true;
-    } else if (arg === '--vendor') {
-      scanVendor = true;
+    } else if (flagToLanguage[arg]) {
+      languages.add(flagToLanguage[arg]);
     } else if (!arg.startsWith('-')) {
       targetFolder = arg;
+    } else {
+      console.error(`Error: Unknown option "${arg}" (see --help)`);
+      process.exit(1);
     }
   }
 
-  // If neither flag is specified, default to scanning node_modules for backward compatibility
-  if (!scanModules && !scanVendor) {
-    scanModules = true;
+  // If no language flag is specified, default to JavaScript
+  if (languages.size === 0) {
+    languages.add('js');
   }
 
   return {
     cleanMode,
     targetFolder: targetFolder || process.cwd(),
-    scanModules,
-    scanVendor
+    languages: [...languages]
   };
 }
 
 // Main execution wrapped in async function
 async function main() {
-  const { cleanMode, targetFolder: parentFolder, scanModules, scanVendor } = parseArgs();
+  const { cleanMode, targetFolder: parentFolder, languages } = parseArgs();
 
   // Validate the parent folder exists
   if (!fs.existsSync(parentFolder)) {
@@ -208,12 +231,12 @@ async function main() {
     process.exit(1);
   }
 
-  // Build list of target directory names to search for
-  const targetNames = [];
-  if (scanModules) targetNames.push('node_modules');
-  if (scanVendor) targetNames.push('vendor');
+  // Build list of target directory names (and their marker files) from the selected languages
+  const targetDirs = languages.flatMap(lang => LANGUAGES[lang].dirs);
+  const targetNames = targetDirs.map(dir => dir.name);
+  const markersByName = Object.fromEntries(targetDirs.map(dir => [dir.name, dir.marker]));
 
-  const targetDescription = targetNames.join(' and ');
+  const targetDescription = targetNames.join(', ');
   console.log(`Scanning for ${targetDescription} directories in: ${path.resolve(parentFolder)}\n`);
 
   // Find all target directories
@@ -231,13 +254,11 @@ async function main() {
   const results = [];
 
   for (const dir of foundDirs) {
-    // SAFETY CHECK: For vendor directories, verify autoload.php exists
-    if (dir.type === 'vendor') {
-      const autoloadPath = path.join(dir.path, 'autoload.php');
-      if (!fs.existsSync(autoloadPath)) {
-        console.log(`Skipping ${dir.path} - no autoload.php found (not a valid Composer vendor directory)`);
-        continue;
-      }
+    // SAFETY CHECK: If this directory type has a marker file, verify it exists
+    const marker = markersByName[dir.type];
+    if (marker && !fs.existsSync(path.join(dir.path, marker))) {
+      console.log(`Skipping ${dir.path} - no ${marker} found (not a valid ${dir.type} directory)`);
+      continue;
     }
 
     console.log(`Calculating size of: ${dir.path}...`);
